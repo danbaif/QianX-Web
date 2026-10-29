@@ -1,0 +1,772 @@
+/* ============================================================
+   一人一展，本日限定 —— White Gallery Press
+   视觉 / 体验规范 v1.5 的 1:1 落地（§8「唯一生效值」）
+   零依赖 · 零 CDN · 零 JS · 双击 index.html 即可离线运行
+   ============================================================ */
+
+/* ---------- 0. 色板与字体（全本地栈，零 FOUT） ---------- */
+:root{
+  --paper:#FBF7F1;          /* 暖白纸：红卡落在暖纸上才不"发灰" */
+  --ink:#14100E;
+  --card:#8E1B15;           /* 朱漆基色（仅作兜底，实际用三层渐变） */
+  --card-hi:#B7301F;
+  --card-lo:#5C0E0B;
+  --ivory:#FFF4E8;          /* 卡上主文字：暖象牙，比纯白更"印刷" */
+  --body:rgba(255,241,229,.86);
+  --muted:rgba(255,238,224,.56);
+  --hairline:rgba(255,236,220,.22);
+  --accent:#FF5C45;         /* 血红：与照片里的血色呼应，在近黑底上对比 5.4:1 */
+  --hero-h:calc(var(--card-h) * .55);  /* 照片窗口覆盖画面 82%，下巴落在渐隐之上 */
+  --r:clamp(12px, calc(var(--card-w) * .034), 20px);   /* 卡角：跟着卡宽走，不写死 */  /* 清晰图高度：必须按卡高算，百分比 padding 会按宽度解析 */
+
+  --serif: Georgia,'Times New Roman','Songti SC','SimSun',serif;
+  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+
+  /* ---- 卡片几何：只允许在断点里覆写这一对 px 字面量 ----
+     被 .card / .veil / --edge / --band 四处共读，禁止 min() / clamp()（会静默算错） */
+  --card-w:331px;
+  --card-h:calc(var(--card-w) * 1.5);
+
+  /* ---- 封面：tile 只受宽度支配（查表口径，任何算式不得手写 tile） ---- */
+  --tile:124px;
+  --tile-gap:0px;
+  --copy-w:1240;        /* 单份内容宽 = N ×(tile+gap)，无单位，供算时长用 */
+
+  /* ---- 速度（px/s，无单位）：CSS 无法把「长度÷数字」算成时间，
+         故这里只存数字，时长由 calc(copy-w / speed * 1s) 在 track 上合成 ---- */
+  --speed-a:26;
+  --speed-b:22;
+
+  /* ---- band：系数只分两档（0.18 / 矮视口 0.24） ---- */
+  --band-f:0.28;
+  --band:calc(var(--card-h) * var(--band-f));
+
+  /* ---- 侧向收边：min(88px, 单侧留白 × 2/3) = min(88px, (100vw − card-w) / 3)
+         规范 §8-3 的字面式写成 *2/3（未除以单侧留白），与本条验收值
+         14.7 / 69.3 / 86.7 全部差 2 倍；此处按验收值 + §8「不变」里的
+         `--edge: min(88px, gap×2/3)`（gap=单侧留白）落地 ---- */
+  --edge:min(88px, calc((100vw - var(--card-w)) / 3));
+
+  /* ---- 字体与内边距：全档各一条，不再分档写死 ---- */
+  /* 字号与内边距一律锚定 --card-w，禁止 vw/vh/svh：
+     卡片尺寸由断点矩阵（宽度×高度共同决定）给定，字号再挂视口就会出现
+     "卡按高度撑大、字按宽度缩小"的分裂（768×1024 曾是 560 卡 + 32px 名）。
+     系数由 560 档反解：0.02→11.2 / 0.108→60.5→封顶 56 / 0.0308→17.2→封顶 16 */
+  --label-size:clamp(10px, calc(var(--card-w) * .020), 12px);
+  --name-size:clamp(30px, calc(var(--card-w) * .108), 56px);
+  --date-size:clamp(13px, calc(var(--card-w) * .0308), 16px);
+  --wish-size:clamp(13px, calc(var(--card-w) * .0263), 15px);
+  --pad-y:clamp(30px, calc(var(--card-w) * .0846), 44px);
+  --pad-x:clamp(26px, calc(var(--card-w) * .0769), 40px);
+
+  --wish-lh:1.9;
+}
+
+/* ---------- 1. 基础 ---------- */
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{ background:var(--paper); }
+
+body{
+  margin:0;
+  /* 纸面：中心微亮 + 极淡的暖红斑，让红卡像"落在纸上"而不是贴在屏幕上 */
+  background:
+    radial-gradient(62% 54% at 50% 38%, #FFFDF9 0%, rgba(255,253,249,0) 72%),
+    radial-gradient(40% 34% at 50% 62%, rgba(176,42,32,.055) 0%, rgba(176,42,32,0) 70%),
+    var(--paper);
+  color:var(--body);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  /* 注意：绝不在 html/body 上写 overflow-x:hidden（会锁死 100svh） */
+}
+
+::selection{ background:#7E1712; color:#FFF4E8; }
+
+/* 兜底焦点环：本页可聚焦元素数 = 0，保留以应对未来改动 */
+:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+
+/* ---------- 2. 舞台 ---------- */
+.stage{
+  position:relative;
+  min-height:100vh;
+  min-height:100svh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  padding-block: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-bottom));
+  padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+  overflow:clip;              /* clip 不创建滚动容器，100svh 不被破坏 */
+}
+@supports not (overflow:clip){
+  .stage{ overflow:hidden; }
+}
+
+/* ---------- 3. 轨道：宽 120vw + left:-10vw ----------
+   旋转 ±3° 后四角会露出纸色硬边，100vw 不够；140vw 是纯浪费（会把件数顶到 28） */
+.marquee{
+  transition:filter .45s ease;
+  position:absolute;
+  z-index:1;                 /* marquee 1 / edge+veil 2 / card 3 */
+  left:-10vw;
+  width:120vw;
+  height:var(--tile);
+  pointer-events:none;       /* 全层穿透：文字可选、零误触（含 tile，封面零交互） */
+}
+/* 整条轨道罩一层极淡的斜向印刷纹，像被丝网印过，打破"平铺"的单调 */
+.marquee::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, rgba(0,0,0,0) 1px 3px);
+  mix-blend-mode:multiply;
+  opacity:.45;
+}
+.marquee--a{
+  top:calc(50% - var(--band));
+  transform:translateY(-50%) rotate(-3deg);
+}
+.marquee--b{
+  top:calc(50% + var(--band) + 8px);
+  transform:translateY(-50%) rotate(2deg);
+}
+
+.marquee__track{
+  display:flex;
+  width:max-content;
+  height:100%;
+  will-change:transform;
+  animation-name:drift-right;
+  animation-duration:calc(var(--copy-w) / var(--speed-a) * 1s);
+  animation-timing-function:linear;
+  animation-iteration-count:infinite;
+}
+.marquee--b .marquee__track{
+  animation-name:drift-left;
+  animation-duration:calc(var(--copy-w) / var(--speed-b) * 1s);
+}
+
+/* 单份：宽度显式 = N×(tile+gap)，末尾补一个 padding 当接缝间距 →
+   组内间距与接缝间距完全相等，translateX(-50%) 精确等于一份宽度，永久无缝 */
+.copy{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:var(--tile-gap);
+  width:calc(var(--copy-w) * 1px);
+  padding-right:0;
+  height:100%;
+}
+
+.tile{
+  display:block;
+  flex:0 0 auto;
+  width:var(--tile);
+  height:var(--tile);
+  aspect-ratio:1;            /* CLS = 0 */
+  background:#E7DCD1;        /* 占位底色，无 skeleton 动画 */
+  opacity:.82;
+  border-radius:2px;
+  box-shadow:
+    inset 0 0 0 2px rgba(12,5,4,.55),
+    inset 0 2px 0 rgba(255,255,255,.30),
+    inset 0 -26px 34px -26px rgba(0,0,0,.68);
+  /* 真实封面保留原色，只压一点亮度与饱和，避免二十多张图互相打架 */
+  filter:brightness(.98) contrast(1.04) saturate(1.3);
+  user-select:none;
+  -webkit-user-drag:none;
+}
+
+@keyframes drift-right{ from{ transform:translateX(-50%); } to{ transform:translateX(0); } }
+@keyframes drift-left { from{ transform:translateX(0); }    to{ transform:translateX(-50%); } }
+
+/* 件数按宽度裁剪：<768 留 10 张 / 768–1199 留 12 张 / ≥1200 全 26 张。
+   被裁掉的 <img> 必须同时带 loading="lazy"，否则预加载器仍会下载 */
+@media (max-width:1199px){
+  .copy > :nth-child(n+13){ display:none; }
+}
+@media (max-width:767px){
+  .copy > :nth-child(n+11){ display:none; }
+}
+
+/* ---------- 4. 收边与降噪 ---------- */
+.fade{
+  position:absolute;
+  z-index:2;
+  top:0;
+  bottom:0;
+  width:var(--edge);
+  pointer-events:none;
+}
+.fade--l{ left:0;  background:linear-gradient(to right, var(--paper), rgba(251,251,250,0)); }
+.fade--r{ right:0; background:linear-gradient(to left,  var(--paper), rgba(251,251,250,0)); }
+
+/* veil 必须是 stage 的兄弟元素：做成 .card::before 会被卡片层叠上下文压暗 2px 外框 */
+.veil{
+  position:absolute;
+  z-index:2;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:calc(var(--card-w) + 160px);
+  height:calc(var(--card-h) + 120px);
+  background:radial-gradient(closest-side,#FDFAF5 0%,rgba(253,250,245,.92) 46%,rgba(253,250,245,0) 100%);
+  pointer-events:none;
+}
+
+/* ---------- 5. 卡片：朱漆画框 + 3D ---------- */
+/* .tilt 只负责透视舞台：真正的旋转落在 .card 上，
+   两者分开是为了让"阴影随倾斜移动"与"卡面自身旋转"互不干扰 */
+.tilt{
+  position:relative;
+  z-index:3;
+  perspective:1500px;
+  perspective-origin:50% 42%;
+  width:var(--card-w);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  /* 触屏：纵向滑动仍交给页面滚动（矮视口需要滚），横向拖动才归卡片 */
+  touch-action:pan-y;
+}
+/* 落影：始终平躺在地面，不随卡片旋转（translateZ(-90px) 推到卡后） */
+.tilt::after{
+  content:"";
+  position:absolute;
+  z-index:0;
+  left:4%; right:4%;
+  bottom:-7%;
+  height:16%;
+  background:radial-gradient(ellipse at 50% 50%, rgba(92,14,11,.55), rgba(92,14,11,0) 72%);
+  border-radius:50% / 60%;
+  filter:blur(22px);
+  transform:translateZ(-90px);
+  opacity:calc(.55 + var(--lift, 0) * .35);
+  transition:opacity .5s ease;
+  pointer-events:none;
+}
+
+.card{
+  position:relative;
+  z-index:1;
+  width:100%;
+  height:var(--card-h);
+  padding:var(--pad-y) var(--pad-x);
+  border:1px solid rgba(24,14,11,.55);
+  border-radius:var(--r);
+  display:block;
+  text-align:left;
+  transform-style:preserve-3d;
+  transform:
+    rotateX(var(--rx,0deg))
+    rotateY(var(--ry,0deg))
+    translate3d(var(--mx,0px), var(--my,0px), var(--tz,0px));
+  transition:transform .9s cubic-bezier(.22,1.28,.36,1), box-shadow .9s cubic-bezier(.22,1.28,.36,1);
+  will-change:transform;
+  /* 底层 = 照片下半部的虚化延展（已烘焙暗角与文字区压暗）；
+     清晰照片由 .card__hero 叠在上面，两者共用同一张源图，接缝不可见 */
+  background:#0A0405 url("assets/card-blur.jpg") center / cover no-repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 0 0 1px rgba(0,0,0,.26),
+    0 0 40px rgba(58,2,2,.22) inset,
+    0 0 0 1px rgba(255,150,116,.22),
+    0 0 60px -6px rgba(255,90,56,.42),
+    0 60px 96px -54px rgba(58,8,6,.8),
+    0 22px 46px -26px rgba(58,8,6,.5);
+}
+/* 卡片描边：一道"吃光"的暖金渐变细环（只保留最外 1px，跟随圆角） */
+.card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:var(--r);
+  padding:1.5px;
+  background:linear-gradient(160deg,
+    rgba(255,232,196,.95) 0%,
+    rgba(255,140,90,.5) 26%,
+    rgba(255,190,140,.12) 52%,
+    rgba(255,232,196,.9) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+          mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite:exclude;
+  pointer-events:none;
+  z-index:4;
+}
+
+/* 清晰照片层：只铺满上半部，底部用蒙版融进虚化层 → 没有硬边接缝 */
+.card__hero{
+  position:absolute;
+  inset:0 0 auto 0;
+  height:var(--hero-h);
+  z-index:0;
+  pointer-events:none;
+  background:url("assets/hero.jpg") 50% 0% / cover no-repeat;
+  border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0;
+  -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 90%, rgba(0,0,0,.55) 96%, transparent 100%);
+          mask-image:linear-gradient(to bottom, #000 0%, #000 90%, rgba(0,0,0,.55) 96%, transparent 100%);
+}
+/* 跟随指针的高光：用 screen 混合只在红漆上提亮，不会把白字洗掉 */
+.card__glare{ display:none; }   /* 已停用：悬停改为"景深聚焦"，不再用跟随光斑 */
+.card-inner{ position:relative; z-index:2; }
+/* 文字分层：给三块不同 Z，倾斜时产生真实的视差（卡是"厚"的，不是一张贴纸） */
+.card__head{ transform:translateZ(16px); }
+.card__mid{ transform:translateZ(30px); }
+.card__foot{ transform:translateZ(20px); }
+
+
+/* v1.7 五行栅格：顶栏(含 hairline) / 弹性 / 版心 / 弹性 / 底栏
+   60/40 分配 → 版心略低于几何中心，上多下少，像装裱好的版心。
+   两条弹性行带 minmax 下限（20/16）：纯 fr 在空间不足时会静默塌缩，
+   表现为"字挤在一起"，截图极难发现；有下限后降级方式变成"变紧"。 */
+.card-inner{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  gap:clamp(16px, calc(var(--card-h) * .05), 34px);
+  height:100%;
+  /* 上边界 = 清晰图占比：文字永远不会爬进照片区 */
+  padding-top:calc(var(--hero-h) - var(--pad-y));
+  /* 下边界 = 给底部播放器留出空间（footer 已删，正文自行让位） */
+  padding-bottom:30px;
+  min-width:0;
+  min-height:0;
+}
+.card__mid{ min-width:0; min-height:0; }
+/* 内框：1px，inset 10px（相对 padding box），不接指针 */
+.card::after{
+  content:"";
+  position:absolute;
+  inset:9px;
+  border-radius:calc(var(--r) - 9px);
+  border:1px solid rgba(232,196,150,.42);
+  pointer-events:none;
+  animation:fade-in 240ms ease-out both;
+}
+@keyframes fade-in{ from{ opacity:0; } to{ opacity:1; } }
+
+@media (max-width:767px){
+  .card::after{ inset:8px; }   /* <768 内框收一点，避免挤压内边距 */
+}
+
+/* --- 5.1 顶栏（grid 第 1 行，含下方 hairline；下间距由 3fr 行负责） --- */
+.kicker{
+  margin:0;
+  padding-bottom:calc(var(--card-h) * .024);
+  border-bottom:1px solid var(--hairline);   /* hairline 唯一用途 */
+  font-family:var(--sans);
+  font-size:var(--label-size);
+  line-height:1.4;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:rgba(255,238,224,.70);
+}
+.accent{ color:var(--accent); }
+
+/* --- 5.2 版心（grid 第 3 行）：eyebrow → wish --- */
+.card__mid{
+  min-width:0;
+  min-height:0;
+}
+
+.eyebrow{
+  margin:0 0 calc(var(--card-h) * .018);
+  font-size:var(--label-size);
+  line-height:1.4;
+  letter-spacing:.08em;
+  color:var(--body);
+}
+
+.name{
+  margin:0;
+  font-family:var(--serif);
+  font-weight:400;            /* Georgia bold 会破坏装裱感 */
+  font-size:var(--name-size);
+  line-height:1.04;
+  letter-spacing:.02em;
+  color:var(--ivory);
+  text-shadow:0 1px 0 rgba(70,10,8,.28);
+  overflow-wrap:anywhere;
+}
+/* 姓名 >8 字时手动加此 class，降一档字号 */
+.name--long{ font-size:calc(var(--name-size) * .72); }
+
+.dates{ margin:calc(var(--card-h) * .03) 0 0; }
+
+.date{
+  margin:0;
+  font-family:var(--sans);
+  font-size:var(--date-size);
+  line-height:1.2;
+  letter-spacing:.06em;
+  color:var(--accent);
+  font-variant-numeric:tabular-nums;
+}
+.date-sub{
+  margin:calc(var(--card-h) * .012) 0 0;
+  font-size:var(--label-size);
+  line-height:1.4;
+  letter-spacing:.3em;
+  color:var(--muted);
+}
+
+/* --- 5.3 寄语（版心最后一段） --- */
+.wish{
+  margin:calc(var(--card-h) * .04) 0 0;
+  min-height:0;               /* 关键：否则 fr 拒绝收缩，会把 footer 挤出卡片 */
+  max-width:26em;
+  font-size:var(--wish-size);
+  line-height:var(--wish-lh);
+  letter-spacing:.01em;
+  color:var(--body);
+  /* 36 字在 26em/15px 处会断成不均衡的两行，balance 让两行等长；
+     不支持的浏览器退化为普通折行，无害 */
+  text-wrap:balance;
+}
+
+/* --- 5.4 底栏（grid 第 5 行）：下间距由 2fr 行负责，这里只留保底量 --- */
+.card__foot{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:14px;
+  /* 不设 margin-top：下空白完全由第 4 轨（minmax(16px,2fr)）负责。
+     留 13px margin 会把下方弹性行又吃掉一截，让 3:2 在视觉上退化成 4:3 */
+  padding-top:calc(var(--card-h) * .022);
+  border-top:1px solid rgba(255,232,226,.26);
+  font-size:var(--label-size);
+  line-height:1.4;
+  letter-spacing:.08em;
+  color:var(--muted);
+}
+.pager{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* --- 5.5 3D 交互态 ---
+   静止时是"装裱好的印刷品"，指针进入才活过来；离开后弹性归位到 0。
+   is-live 用短时长（跟手），归位用长时长 + 过冲曲线（像漆板落回墙面）。 */
+.tilt.is-live .card{
+  transition:transform .13s ease-out, box-shadow .3s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 0 0 1px rgba(0,0,0,.26),
+    0 70px 116px -54px rgba(58,8,6,.9),
+    0 30px 58px -30px rgba(58,8,6,.6);
+}
+.stage:has(.tilt.is-live) .marquee{
+  filter:blur(2.5px) saturate(.9) brightness(.9);
+}
+.stage:has(.tilt.is-live) .card__hero{
+  filter:brightness(1.05) saturate(1.04);
+  transition:filter .3s ease;
+}
+.tilt.is-pressed .card{
+  --tz:-16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,214,170,.22),
+    inset 0 0 0 1px rgba(0,0,0,.28),
+    0 22px 44px -34px rgba(92,14,11,.95),
+    0 8px 18px -14px rgba(92,14,11,.7);
+}
+.tilt.is-settling .card{
+  transition:transform 1s cubic-bezier(.18,1.42,.36,1), box-shadow .7s ease;
+}
+
+/* 首次进入的"请你转我一下"提示：只跑一次，结束即回到原状 */
+@keyframes tilt-hint{
+  0%,100%{ transform:rotateX(0deg) rotateY(0deg) translate3d(0,0,0); }
+  20%    { transform:rotateX(4deg) rotateY(-7deg) translate3d(0,0,18px); }
+  46%    { transform:rotateX(-3deg) rotateY(6deg) translate3d(0,0,12px); }
+  72%    { transform:rotateX(1.5deg) rotateY(-2.5deg) translate3d(0,0,5px); }
+}
+.tilt.is-hint .card{
+  animation:tilt-hint 2s cubic-bezier(.4,0,.2,1) .9s both;
+}
+
+/* ---------- 6. 分段落点（0.2 / 0.5 / 1.2 / 2.0 / 3.0s） ---------- */
+@keyframes rise{
+  from{ opacity:0; transform:translateY(4px); }
+  to  { opacity:1; transform:translateY(0); }
+}
+/* 总时长 ≈0.96s 收尾：仍保留"从上往下依次浮现"的次序感，
+   但任何截图/预览/分享卡片都不会拍到缺行的卡（原 3.0s 太快暴露残缺） */
+.kicker,.eyebrow,.name,.dates,.wish,.card__foot{
+  animation:rise 380ms cubic-bezier(.2,.7,.2,1) both;
+}
+.kicker{ animation-delay:.06s; }
+.eyebrow,.name{ animation-delay:.16s; }
+.dates{ animation-delay:.30s; }
+.wish{ animation-delay:.44s; }
+.card__foot{ animation-delay:.58s; }
+
+/* ============================================================
+   7. 断点：9 条互斥，每条两端条件写满（改一条不会牵动别条）
+   ============================================================ */
+
+/* --- 7.1 tile / 件数 / 单份宽：只受宽度支配 --- */
+@media (min-width:768px){
+  :root{ --tile:186px; --tile-gap:0px; --copy-w:2232; }   /* 12 张 */
+}
+@media (min-width:1200px){
+  :root{ --tile:252px; --tile-gap:0px; --copy-w:6552; }   /* 26 张 */
+}
+@media (min-width:1600px){
+  :root{ --tile:268px; --tile-gap:0px; --copy-w:6968; }   /* 26 张 */
+}
+
+/* --- 7.2 速度：<768 与矮视口 26/22；620–759 → 36/30；≥760 → 42/34 --- */
+@media (min-width:768px){
+  :root{ --speed-a:36; --speed-b:30; }
+}
+@media (min-width:768px) and (min-height:760px){
+  :root{ --speed-a:42; --speed-b:34; }
+}
+@media (max-height:619px){          /* 必须排在后面，压过上面两条 */
+  :root{ --speed-a:26; --speed-b:22; }
+}
+
+/* --- 7.3 band 系数两档 --- */
+@media (max-height:759px){
+  :root{ --band-f:.27; }
+}
+
+/* --- 7.4 卡片尺寸矩阵（矮视口 ≤619 → 允许纵向滚动） --- */
+@media (max-height:619px){
+  body{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    min-height:100vh;
+    min-height:100svh;
+  }
+  .stage{
+    min-height:auto;
+    flex:1 0 auto;
+    padding-block:24px;
+  }
+}
+@media (max-height:619px) and (max-width:359px){
+  :root{ --card-w:258px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (max-height:619px) and (min-width:360px) and (max-width:767px){
+  :root{ --card-w:288px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (max-height:619px) and (min-width:768px){
+  :root{ --card-w:316px; --card-h:calc(var(--card-w) * 1.5); }
+}
+
+@media (min-height:620px) and (max-width:359px){
+  :root{ --card-w:258px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (min-height:620px) and (min-width:360px) and (max-width:599px){
+  :root{ --card-w:288px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (min-height:620px) and (min-width:600px) and (max-width:767px){
+  :root{ --card-w:316px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (min-height:620px) and (max-height:759px) and (min-width:768px){
+  :root{ --card-w:440px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (min-height:760px) and (max-height:949px) and (min-width:768px){
+  :root{ --card-w:520px; --card-h:calc(var(--card-w) * 1.5); }
+}
+@media (min-height:950px) and (min-width:768px){
+  :root{ --card-w:560px; --card-h:calc(var(--card-w) * 1.5); }
+}
+
+/* --- 7.5 移动端：veil 关闭、寄语降一档、去掉 will-change --- */
+@media (max-width:767px){
+  :root{ --hero-h:calc(var(--card-h) * .52); }
+  /* veil 在 <768 必须关：单侧留白仅 22px，80px 的水平白晕会把唯一可见的封面洗白 */
+  .veil{ display:none; }
+  /* 卡窄+字大，装饰性副标题优先让位，保证图与正文都不被挤 */
+  .eyebrow{ display:none; }
+  .card-inner{ gap:clamp(12px, 3.5vw, 18px); }
+  /* 移动端卡窄，取"脸"而不是"帽子"；渐隐推后，避免五官刚出来就被虚化 */
+  .card__hero{
+    background-position:50% 0%;
+    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 92%, rgba(0,0,0,.55) 97%, transparent 100%);
+            mask-image:linear-gradient(to bottom, #000 0%, #000 92%, rgba(0,0,0,.55) 97%, transparent 100%);
+  }
+  .marquee__track{ will-change:auto; }
+  .kicker{ letter-spacing:.16em; }
+  .wish{ --wish-lh:1.75; }
+}
+@media (max-width:359px){
+  .kicker{ letter-spacing:.14em; }
+}
+
+/* ---------- 8. 降低动态偏好 ---------- */
+@media (prefers-reduced-motion:reduce){
+  .marquee__track{
+    animation:none;
+    will-change:auto;
+  }
+  /* 静止位移交错错位（不对齐）；单份宽恒 ≥120vw，左右不露空档 */
+  .marquee--a .marquee__track{ transform:translateX(-12%); }
+  .marquee--b .marquee__track{ transform:translateX(-30%); }
+
+  .kicker,.eyebrow,.name,.dates,.wish,.card__foot,.card::after{
+    animation:none;
+    opacity:1;
+    transform:none;
+  }
+  .card::after{ animation:none; }
+
+  /* 3D 关闭：卡片退回"平放的一张印刷品"，内容与静止构图完全不变 */
+  .tilt{ perspective:none; }
+  .card,.card__head,.card__mid,.card__foot{
+    transform:none !important;
+    transition:none !important;
+    animation:none !important;
+  }
+  .card__glare{ display:none; }
+  .tilt::after{ display:none; }
+}
+
+/* ---------- 9. 音乐播放按钮（卡片右上角，不压文字） ---------- */
+.music-toggle{
+  position:absolute;
+  top:calc(var(--hero-h) - 66px);
+  right:16px;
+  z-index:6;
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  padding:0;
+  color:#FFF2E6;
+  background:rgba(12,6,5,.58);
+  border:1px solid rgba(255,232,196,.72);
+  box-shadow:0 8px 20px -10px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.2);
+  -webkit-backdrop-filter:blur(6px) saturate(1.1);
+          backdrop-filter:blur(6px) saturate(1.1);
+  cursor:pointer;
+  transition:transform .2s ease, background .2s ease, opacity .3s ease;
+}
+.music-toggle:hover{ background:rgba(12,6,5,.62); transform:scale(1.07); }
+.music-toggle:active{ transform:scale(.96); }
+.music-toggle .ico{ width:18px; height:18px; fill:currentColor; display:block; }
+.music-toggle .ico-pause{ display:none; }
+.music-toggle.is-playing .ico-play{ display:none; }
+.music-toggle.is-playing .ico-pause{ display:block; }
+.music-toggle.is-mute{ opacity:.35; pointer-events:none; }
+.music-toggle.is-playing{
+  animation:breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe{
+  0%,100%{ box-shadow:0 8px 20px -10px rgba(0,0,0,.7), 0 0 0 0 rgba(255,150,120,.35); }
+  50%    { box-shadow:0 8px 20px -10px rgba(0,0,0,.7), 0 0 0 9px rgba(255,150,120,0); }
+}
+@media (max-width:767px){
+  .music-toggle{ top:calc(var(--hero-h) - 52px); right:10px; width:34px; height:34px; }
+  .music-toggle .ico{ width:15px; height:15px; }
+}
+@media (prefers-reduced-motion:reduce){
+  .music-toggle.is-playing{ animation:none; }
+}
+
+/* ---------- 11. 播放器条（照片底部，玻璃质感） ---------- */
+.player{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:6;
+  height:54px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 18px;
+  border-radius:0 0 calc(var(--r) - 1px) calc(var(--r) - 1px);
+  color:#FFF2E6;
+  background:linear-gradient(180deg, rgba(22,12,9,.68), rgba(10,5,4,.82));
+  border-top:1px solid rgba(255,232,196,.22);
+  box-shadow:0 -8px 24px -18px rgba(0,0,0,.6);
+  -webkit-backdrop-filter:blur(12px) saturate(1.2);
+          backdrop-filter:blur(12px) saturate(1.2);
+}
+.player__play{
+  width:30px; height:30px; flex:0 0 auto;
+  border-radius:50%; display:grid; place-items:center;
+  border:none; color:#FFF2E6; background:rgba(255,255,255,.14); cursor:pointer;
+}
+.player__play .ico{ width:15px; height:15px; fill:currentColor; }
+.player__play .ico-pause{ display:none; }
+.player.is-playing .ico-play{ display:none; }
+.player.is-playing .ico-pause{ display:block; }
+.player__meta{ flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
+.player__top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.player__title{ font-size:12px; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.player__time{ font-size:10px; color:rgba(255,240,230,.6); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.player__track{ height:3px; border-radius:2px; background:rgba(255,255,255,.18); overflow:hidden; }
+.player__fill{ height:100%; width:0%; border-radius:2px; background:linear-gradient(90deg,#FF6A52,#FFD9B0); }
+.player.is-mute{ opacity:.5; }
+@media (max-width:767px){
+  .player{ height:46px; padding:0 14px; gap:8px; }
+  .player__play{ width:28px; height:28px; }
+  }
+
+/* ---------- 12. 祝福条（卡片下方，与卡片一起 3D 旋转） ---------- */
+.bless{
+  position:relative;
+  z-index:4;             /* 弹出的祝福词层级要高于卡片 */
+  width:100%;
+  height:58px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(160deg,#26120c 0%,#140907 55%,#0c0504 100%);
+  border:1px solid rgba(255,232,196,.30);
+  box-shadow:0 12px 30px -18px rgba(58,8,6,.65), inset 0 1px 0 rgba(255,255,255,.10);
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  transform-style:preserve-3d;
+  transition:transform .9s cubic-bezier(.22,1.28,.36,1);
+}
+.bless__btn{
+  padding:11px 26px;
+  border:none;
+  border-radius:999px;
+  color:#FFF6EC;
+  font-family:var(--sans);
+  font-size:14px;
+  letter-spacing:.08em;
+  cursor:pointer;
+  background:linear-gradient(160deg,#FF6A52 0%,#B23A2E 100%);
+  box-shadow:0 10px 22px -10px rgba(255,90,60,.55), inset 0 1px 0 rgba(255,255,255,.25);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.bless__btn:hover{ transform:translateY(-1px); }
+.bless__btn:active{ transform:translateY(0) scale(.97); }
+.bless-word{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  font-family:var(--serif);
+  font-size:15px;
+  letter-spacing:.12em;
+  color:#FF6A52;
+  font-weight:600;
+  text-shadow:0 1px 0 rgba(0,0,0,.35);
+  pointer-events:none;
+  white-space:nowrap;
+  animation:bless-pop 1.7s cubic-bezier(.16,.7,.24,1) forwards;
+}
+@keyframes bless-pop{
+  0%  { opacity:0; transform:translate(-50%,-50%) scale(.4); }
+  16% { opacity:1; transform:translate(-50%,-50%) scale(1.14); }
+  72% { opacity:1; transform:translate(calc(-50% + var(--dx)*.72), calc(-50% + var(--dy)*.72)) scale(1) rotate(calc(var(--rot)*.72)); }
+  100%{ opacity:0; transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.9) rotate(var(--rot)); }
+}
+@media (max-width:767px){
+  .bless{ width:var(--card-w); height:52px; }
+  .bless__btn{ font-size:13px; padding:10px 22px; }
+  .bless-word{ font-size:14px; }
+}
